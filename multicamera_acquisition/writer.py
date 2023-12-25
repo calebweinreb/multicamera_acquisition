@@ -17,6 +17,7 @@ import glob
 import logging
 from tqdm import tqdm
 import numpy as np
+import os
 
 import serial
 from pathlib2 import Path
@@ -85,8 +86,7 @@ class Writer(mp.Process):
         self.metadata_file_name = metadata_file_name
         self.camera_name = camera_name
         self.camera_serial = camera_serial
-        self.orig_stem = self.video_file_name.stem
-        self.orig_stem_metadata = self.metadata_file_name.stem
+        self.orig_stem, self.file_ext = os.path.splitext(self.video_file_name)
         self.max_video_frames = max_video_frames
         self.camera_brand = camera_brand
         self.fps = fps
@@ -143,10 +143,10 @@ class Writer(mp.Process):
                         self.close()
                         self.video_file_name = (
                             self.video_file_name.parent
-                            / f"{self.orig_stem}.{current_frame}{self.video_file_name.suffix}"
+                            / f"{self.orig_stem}.{current_frame}{self.file_ext}"
                         )
                         logging.log(
-                            logging.DEBUG, f"Creating new file self.video_file_name"
+                            logging.DEBUG, f"Creating new file {self.video_file_name}"
                         )
                         self.pipe = None
                         frame_id = 0

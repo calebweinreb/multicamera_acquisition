@@ -1,6 +1,4 @@
 from multicamera_acquisition.interfaces import get_camera
-from multicamera_acquisition.video_io_ffmpeg import write_frame
-from multicamera_acquisition.paths import ensure_dir
 from multicamera_acquisition.interfaces.arduino import (
     packIntAsLong,
     wait_for_serial_confirmation,
@@ -20,10 +18,8 @@ import logging
 from tqdm import tqdm
 import numpy as np
 import sys
-
+import os
 import serial
-from pathlib import Path
-from multicamera_acquisition.video_io_ffmpeg import count_frames
 
 
 class AcquisitionLoop(mp.Process):
@@ -217,7 +213,7 @@ def end_processes(acquisition_loops, writers, disp):
 
 
 def acquire_video(
-    save_location,
+    save_prefix,
     camera_list,
     recording_duration_s,
     frame_timeout=None,
@@ -292,24 +288,19 @@ def acquire_video(
     if display_frequency < 1:
         display_frequency = 1
 
-    # get Path of save location
-    if type(save_location) != Path:
-        save_location = Path(save_location)
-
     # create a subfolder for the current datetime
     if append_datetime:
         date_str = datetime.now().strftime("%y-%m-%d-%H-%M-%S-%f")
-        save_location = save_location / date_str
+        save_prefix = f"{save_prefix}_{date_str}"
 
-    # ensure that a directory exists to save data in
-    save_location.mkdir(parents=True, exist_ok=True)
-    print(f"Save location exists: {save_location.exists()}")
-    if save_location.exists() == False:
-        raise ValueError(f"Save location {save_location} does not exist")
+    # create the save directory (if it doesn't exist)
+    save_directory = os.path.dirname(save_prefix)
+    os.makedirs(save_directory, exist_ok=True)
 
-    triggerdata_file = save_location / "triggerdata.csv"
-    if triggerdata_file.exists() and (overwrite == False):
-        raise FileExistsError(f"CSV file {triggerdata_file} already exists")
+    # make sure that no files will be overwritten (unless overwrite is True)
+    triggerdata_file = f"{save_prefix}.triggerdata.csv"
+    if os.path.exists(triggerdata_file) and (overwrite == False):
+        raise FileExistsError(f"Triggerdata file {triggerdata_file} already exists")
 
     if verbose:
         logging.log(logging.INFO, f"Initializing Arduino...")
@@ -386,13 +377,13 @@ def acquire_video(
         # create a writer queue
         if camera_dict["brand"] == "lucid":
             if append_camera_serial:
-                video_file = save_location / f"{name}.{serial_number}.avi"
-                metadata_file = save_location / f"{name}.{serial_number}.metadata.csv"
+                video_file = f"{save_prefix}.{name}.{serial_number}.avi"
+                metadata_file = f"{save_prefix}.{name}.{serial_number}.metadata.csv"
             else:
-                video_file = save_location / f"{name}.avi"
-                metadata_file = save_location / f"{name}.metadata.csv"
+                video_file = f"{save_prefix}.{name}.avi"
+                metadata_file = f"{save_prefix}.{name}.metadata.csv"
 
-            if video_file.exists() and (overwrite == False):
+            if os.path.exists(video_file) and (overwrite == False):
                 raise FileExistsError(f"Video file {video_file} already exists")
 
             write_queue = mp.Queue()
@@ -410,13 +401,13 @@ def acquire_video(
             )
         else:
             if append_camera_serial:
-                video_file = save_location / f"{name}.{serial_number}.mp4"
-                metadata_file = save_location / f"{name}.{serial_number}.metadata.csv"
+                video_file = f"{save_prefix}.{name}.{serial_number}.mp4"
+                metadata_file = f"{save_prefix}.{name}.{serial_number}.metadata.csv"
             else:
-                video_file = save_location / f"{name}.mp4"
-                metadata_file = save_location / f"{name}.metadata.csv"
+                video_file = f"{save_prefix}.{name}.mp4"
+                metadata_file = f"{save_prefix}.{name}.metadata.csv"
 
-            if video_file.exists() and (overwrite == False):
+            if os.path.exists(video_file) and (overwrite == False):
                 raise FileExistsError(f"Video file {video_file} already exists")
 
             write_queue = mp.Queue()
@@ -436,13 +427,13 @@ def acquire_video(
             # create asecond write queue for the depth data
             # create a writer queue
             if append_camera_serial:
-                video_file_depth = save_location / f"{name}.{serial_number}.depth.avi"
+                video_file_depth = f"{save_prefix}.{name}.{serial_number}.depth.avi"
                 metadata_file = (
-                    save_location / f"{name}.{serial_number}.metadata.depth.csv"
+                    f"{save_prefix}.{name}.{serial_number}.metadata.depth.csv"
                 )
             else:
-                video_file_depth = save_location / f"{name}.depth.avi"
-                metadata_file = save_location / f"{name}.metadata.depth.csv"
+                video_file_depth = f"{save_prefix}.{name}.depth.avi"
+                metadata_file = f"{save_prefix}.{name}.metadata.depth.csv"
 
             write_queue_depth = mp.Queue()
             writer_depth = Writer(
@@ -566,7 +557,7 @@ def acquire_video(
     except:
         # kill everything if we can't get confirmation
         end_processes(acquisition_loops, writers, disp)
-        return save_location, camera_list
+        return save_prefix, camera_list
 
     if verbose:
         logging.log(logging.INFO, f"Starting Acquisition...")
@@ -635,4 +626,4 @@ def acquire_video(
 
     pbar.close()
 
-    return save_location, camera_list
+    return save_prefix, camera_list
